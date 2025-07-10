@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+import time
 from glob import glob
 
 BLOCK_SIZE = 16
@@ -22,17 +23,13 @@ def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=50):
             grad_mag = np.sqrt(sobelx**2 + sobely**2)
             grad_mean = np.mean(grad_mag)
 
-            # 若纹理太强，跳过
-            #print(grad_mean)
             if grad_mean > texture_thresh:
                 continue
 
-            # 块均值差（代表整体位移）
             mean1 = np.mean(block1)
             mean2 = np.mean(block2)
             sad_block = abs(mean1 - mean2) * BLOCK_SIZE * BLOCK_SIZE
 
-            # 每像素差值（排除微弱跳动）
             pixel_diff = np.abs(block1.astype(np.int16) - block2.astype(np.int16))
             pixel_diff[pixel_diff <= 2] = 0
             sum_diff = np.sum(pixel_diff)
@@ -41,11 +38,9 @@ def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=50):
             sum_total += sum_diff
             valid_block_count += 1
 
-    # 若没有有效块，返回 0
     if valid_block_count == 0:
         return 0.0
 
-    # 防除以零 + 避免负值
     eps = 1e-3
     noise_score = max((sum_total - sad_total), 0) / max(sad_total, eps)
     return noise_score
@@ -74,29 +69,42 @@ def process_video_temporal_noise(input_path, output_path):
 
     prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
     frame_idx = 1
+    total_time = 0.0
+    max_frames = 300
 
-    while True and frame_idx < 300:
+    while frame_idx < max_frames:
         ret, curr_frame = cap.read()
         if not ret:
             break
 
         curr_gray = cv2.cvtColor(curr_frame, cv2.COLOR_BGR2GRAY)
-        noise_score = compute_temporal_noise(prev_gray, curr_gray)
 
-        # 显示 + 保存
+        start_time = time.time()
+        noise_score = compute_temporal_noise(prev_gray, curr_gray)
+        end_time = time.time()
+
+        elapsed_ms = (end_time - start_time) * 1000
+        total_time += elapsed_ms
+
         overlay_text(curr_frame,
                      f"Temporal Noise: {noise_score:.2f}",
                      pos=(width - 350, 40))
-
         out.write(curr_frame)
-        print(f"[Frame {frame_idx:04d}] Noise = {noise_score:.2f}")
+
+        print(f"[Frame {frame_idx:04d}] Noise = {noise_score:.2f}, Time = {elapsed_ms:.2f} ms")
 
         prev_gray = curr_gray
         frame_idx += 1
 
     cap.release()
     out.release()
-    print(f"输出已保存为：{output_path}")
+
+    avg_time = total_time / (frame_idx - 1) if frame_idx > 1 else 0
+    print(f"\n🎬 处理完成：{os.path.basename(input_path)}")
+    print(f"📏 分辨率: {width}x{height}")
+    print(f"🧮 分析帧数: {frame_idx - 1}")
+    print(f"⏱️ 每帧噪点检测平均耗时: {avg_time:.2f} ms")
+    print(f"📁 输出已保存为：{output_path}\n")
 
 def batch_process(input_dir="videos", output_dir="output"):
     os.makedirs(output_dir, exist_ok=True)
