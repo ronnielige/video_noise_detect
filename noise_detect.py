@@ -19,14 +19,15 @@ def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=40):
             block1 = prev_gray[y:y+BLOCK_SIZE, x:x+BLOCK_SIZE]
             block2 = curr_gray[y:y+BLOCK_SIZE, x:x+BLOCK_SIZE]
 
+            # 计算纹理强度（跳过高纹理块）
             sobelx = cv2.Sobel(block2, cv2.CV_32F, 1, 0, ksize=3)
             sobely = cv2.Sobel(block2, cv2.CV_32F, 0, 1, ksize=3)
             grad_mag = np.sqrt(sobelx**2 + sobely**2)
             grad_mean = np.mean(grad_mag)
-
             if grad_mean > texture_thresh:
                 continue
 
+            # 计算SAD和像素级变化
             mean1 = np.mean(block1)
             mean2 = np.mean(block2)
             sad_block = abs(mean1 - mean2) * BLOCK_SIZE * BLOCK_SIZE
@@ -34,6 +35,10 @@ def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=40):
             pixel_diff = np.abs(block1.astype(np.int16) - block2.astype(np.int16))
             pixel_diff[pixel_diff <= 2] = 0
             sum_diff = np.sum(pixel_diff)
+
+            # 平滑亮度权重：暗区域权重加大
+            brightness_weight = 1.0 + 2.0 * np.clip((100.0 - mean2) / 100.0, 0, 1)
+            sum_diff *= brightness_weight
 
             sad_total += sad_block
             sum_total += sum_diff
@@ -80,13 +85,12 @@ def process_video_temporal_noise(input_path, output_path):
             frame_idx += 1
             continue
 
-        # 尝试读取下一帧进行噪点比较
+        # 读取下一帧并计算噪点
         ret, frame2 = cap.read()
         if not ret:
             break
         curr_gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
 
-        # 计算噪点
         start_time = time.time()
         noise_score = compute_temporal_noise(prev_gray, curr_gray)
         elapsed_ms = (time.time() - start_time) * 1000
@@ -95,7 +99,7 @@ def process_video_temporal_noise(input_path, output_path):
 
         print(f"[Frame {frame_idx:04d}-{frame_idx+1:04d}] Noise = {noise_score:.2f}, Time = {elapsed_ms:.2f} ms")
 
-        # 叠加并写入两帧（frame1 和 frame2）
+        # 显示并写入这两帧
         overlay_text(frame1, f"Temporal Noise: {noise_score:.2f}", pos=(width - 350, 40))
         overlay_text(frame2, f"Temporal Noise: {noise_score:.2f}", pos=(width - 350, 40))
         out.write(frame1)
@@ -104,7 +108,7 @@ def process_video_temporal_noise(input_path, output_path):
 
         prev_gray = curr_gray
 
-        # 跳过 N 帧（例如 skip 10）
+        # 跳过 N 帧，但保持显示
         for _ in range(skip_frames):
             ret, skip_frame = cap.read()
             if not ret:
