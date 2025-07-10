@@ -4,11 +4,11 @@ import os
 import time
 from glob import glob
 
-BLOCK_SIZE = 16
+BLOCK_SIZE = 32
 max_frames = 500
 skip_frames = 5  # 每次计算后跳过的帧数
 
-def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=40):
+def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=80):
     h, w = curr_gray.shape
     sad_total = 0
     sum_total = 0
@@ -19,15 +19,18 @@ def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=40):
             block1 = prev_gray[y:y+BLOCK_SIZE, x:x+BLOCK_SIZE]
             block2 = curr_gray[y:y+BLOCK_SIZE, x:x+BLOCK_SIZE]
 
-            # 计算纹理强度（跳过高纹理块）
+            # --- 纹理强度 ---
             sobelx = cv2.Sobel(block2, cv2.CV_32F, 1, 0, ksize=3)
             sobely = cv2.Sobel(block2, cv2.CV_32F, 0, 1, ksize=3)
             grad_mag = np.sqrt(sobelx**2 + sobely**2)
             grad_mean = np.mean(grad_mag)
+
+            # --- 平滑纹理权重：越高纹理越小 ---
             if grad_mean > texture_thresh:
                 continue
+            texture_weight = 1.0 - np.clip(grad_mean / texture_thresh, 0, 1)
 
-            # 计算SAD和像素级变化
+            # --- SAD 和 差值 ---
             mean1 = np.mean(block1)
             mean2 = np.mean(block2)
             sad_block = abs(mean1 - mean2) * BLOCK_SIZE * BLOCK_SIZE
@@ -36,9 +39,12 @@ def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=40):
             pixel_diff[pixel_diff <= 2] = 0
             sum_diff = np.sum(pixel_diff)
 
-            # 平滑亮度权重：暗区域权重加大
-            brightness_weight = 1.0 + 2.0 * np.clip((100.0 - mean2) / 100.0, 0, 1)
-            sum_diff *= brightness_weight
+            # --- 平滑亮度权重：越暗加权越大 ---
+            brightness_weight = 1.0 + 2.0 * np.clip((60.0 - mean2) / 60.0, 0, 1)
+
+            # --- 组合总权重 ---
+            total_weight = brightness_weight * texture_weight
+            sum_diff *= total_weight
 
             sad_total += sad_block
             sum_total += sum_diff
