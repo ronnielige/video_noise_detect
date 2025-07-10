@@ -36,7 +36,7 @@ def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=80):
             sad_block = abs(mean1 - mean2) * BLOCK_SIZE * BLOCK_SIZE
 
             pixel_diff = np.abs(block1.astype(np.int16) - block2.astype(np.int16))
-            pixel_diff[pixel_diff <= 2] = 0
+            # pixel_diff[pixel_diff <= 2] = 0
             sum_diff = np.sum(pixel_diff)
 
             # --- 平滑亮度权重：越暗加权越大 ---
@@ -48,6 +48,7 @@ def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=80):
 
             sad_total += sad_block
             sum_total += sum_diff
+            #print('sad_block:', sad_block, 'sum_diff:', sum_diff, 'texture_weight:', texture_weight, 'brightness_weight:', brightness_weight)
             valid_block_count += 1
 
     if valid_block_count == 0:
