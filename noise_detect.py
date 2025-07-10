@@ -5,6 +5,7 @@ import time
 from glob import glob
 
 BLOCK_SIZE = 16
+max_frames = 100
 
 def compute_temporal_noise(prev_gray, curr_gray, texture_thresh=50):
     h, w = curr_gray.shape
@@ -70,7 +71,6 @@ def process_video_temporal_noise(input_path, output_path):
     prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
     frame_idx = 1
     total_time = 0.0
-    max_frames = 300
 
     while frame_idx < max_frames:
         ret, curr_frame = cap.read()
@@ -118,8 +118,10 @@ def batch_process(input_dir="videos", output_dir="output"):
     for file in files:
         base = os.path.basename(file)
         name, ext = os.path.splitext(base)
+        ext = ".ts"
         out_file = os.path.join(output_dir, f"{name}_noise{ext}")
-        process_video_temporal_noise(file, out_file)
+        if not os.path.exists(out_file):
+            process_video_temporal_noise(file, out_file)
 
 if __name__ == "__main__":
     batch_process("videos", "output")
