@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+import os
+from glob import glob
 
 BLOCK_SIZE = 16
 
@@ -73,7 +75,7 @@ def process_video_temporal_noise(input_path, output_path):
     prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
     frame_idx = 1
 
-    while True:
+    while True and frame_idx < 300:
         ret, curr_frame = cap.read()
         if not ret:
             break
@@ -96,5 +98,20 @@ def process_video_temporal_noise(input_path, output_path):
     out.release()
     print(f"输出已保存为：{output_path}")
 
+def batch_process(input_dir="videos", output_dir="output"):
+    os.makedirs(output_dir, exist_ok=True)
+    exts = [".mp4", ".ts", ".avi", ".mkv", ".mov"]
+    files = [f for f in glob(os.path.join(input_dir, "*")) if os.path.splitext(f)[-1].lower() in exts]
+
+    if not files:
+        print("⚠️ 未找到任何视频文件")
+        return
+
+    for file in files:
+        base = os.path.basename(file)
+        name, ext = os.path.splitext(base)
+        out_file = os.path.join(output_dir, f"{name}_noise{ext}")
+        process_video_temporal_noise(file, out_file)
+
 if __name__ == "__main__":
-    process_video_temporal_noise("cam0rec_ep39_jian_1.mp4", "cam0rec_ep39_jian_1_noise_overlay2.ts")
+    batch_process("videos", "output")
